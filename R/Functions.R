@@ -1704,7 +1704,7 @@ polish.graph = function (G)
   print(sprintf('Recognized %g/%g (%.2f%%) as %s',max(hits),length(gene.names),max(hits)/length(gene.names)*100,class.names[best.hit]))
   
   if (best.hit==1 | best.hit==2) organism.detected='human'
-  #if (best.hit==3 | best.hit==4) organism.detected='mouse'
+  if (best.hit==3 | best.hit==4) organism.detected='mouse'
   if (best.hit==1 | best.hit==4) organism.detected='mouse'
   if (best.hit==1 | best.hit==3) code.detected='gene.name'
   if (best.hit==2 | best.hit==4) code.detected='ensembl'
@@ -1713,17 +1713,15 @@ polish.graph = function (G)
   if (organism.detected=='mouse')  GO.ann = as.list(org.Mm.eg.db::org.Mm.egGO2ALLEGS)
   
   
-  GO.ann$GeneName <- c(rownames(gene.names))
+  GO.ann$GeneName <- c(gene.names)
   names(GO.ann$GeneName) <- GO.ann$GeneName
   regulators.entrez <- GO.ann$GeneName
   
   #regulators.entrez <- GO.ann$`GO:0010468`
   
-   
-  if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(gene.names)
-
+  
   gene.names1 <- as.list(gene.names)
-  names(gene.names1) <- c(rownames(gene.names))
+  names(gene.names1) <- c(gene.names)
   
   if (organism.detected=='human' & code.detected=='gene.name')  org.ann=as.list(org.Hs.eg.db::org.Hs.egSYMBOL)
   if (organism.detected=='human' & code.detected=='ensembl')  org.ann=as.list(org.Hs.eg.db::org.Hs.egENSEMBL)
