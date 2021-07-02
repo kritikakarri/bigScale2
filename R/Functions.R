@@ -1728,7 +1728,7 @@ polish.graph = function (G)
   if (organism.detected=='human' & code.detected=='gene.name')  org.ann=as.list(org.Hs.eg.db::org.Hs.egSYMBOL)
   if (organism.detected=='human' & code.detected=='ensembl')  org.ann=as.list(org.Hs.eg.db::org.Hs.egENSEMBL)
   #if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
-  if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list((gene.names1)
+  if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(gene.names1)
   if (organism.detected=='mouse' & code.detected=='ensembl') org.ann=as.list(org.Mm.eg.db::org.Mm.egENSEMBL)
   
   
