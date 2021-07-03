@@ -2002,7 +2002,7 @@ compare.centrality <- function(centralities,names.conditions)
 
 
 
-polish.graph = function (G)
+polish.graph = function (G,path)
 {
   # if(organism=='human')
   #   {
@@ -2022,36 +2022,49 @@ polish.graph = function (G)
   
   mapped=list()
   org.ann=list()
-  org.ann[[1]]=as.list(org.Hs.eg.db::org.Hs.egALIAS2EG)
-  org.ann[[2]]=as.list(org.Hs.eg.db::org.Hs.egENSEMBL2EG)
-  org.ann[[3]]=as.list(org.Mm.eg.db::org.Mm.egALIAS2EG)
-  org.ann[[4]]=as.list(org.Mm.eg.db::org.Mm.egENSEMBL2EG)
-  class.names=c('Human, Gene Symbol','Human, ENSEMBL','Mouse, Gene Symbol','Mouse, ENSEMBL')
-  mapped$map1=which(is.element(gene.names,names(org.ann[[1]])))
-  mapped$map2=which(is.element(gene.names,names(org.ann[[2]])))
-  mapped$map3=which(is.element(gene.names,names(org.ann[[3]])))
-  mapped$map4=which(is.element(gene.names,names(org.ann[[4]])))
-  
+  org.ann[[1]]=as.list(gene.names)
+  #org.ann[[2]]=as.list(gene.names)
+  #org.ann[[3]]=as.list(org.Mm.eg.db::org.Mm.egALIAS2EG)
+  #org.ann[[3]]=as.list(gene.names)
+  #org.ann[[4]]=as.list(gene.names)
+  #class.names=c('Human, Gene Symbol','Human, ENSEMBL','Mouse, Gene Symbol','Mouse, ENSEMBL')
+  class.names=c('Mouse, Gene Symbol')
+  #mapped$map1=which(is.element(gene.names,names(org.ann[[1]])))
+  mapped$map1=which(is.element(gene.names,(org.ann[[1]])))
+   
   hits=unlist(lapply(mapped, length))
   best.hit=which(hits==max(hits))
   rm(mapped,org.ann)
   gc()
-  print(sprintf('Recognized %g/%g (%.2f%%) as %s',max(hits),length(gene.names),max(hits)/length(gene.names)*100,class.names[best.hit]))
+  print(sprintf('Recognized kritika %g/%g (%.2f%%) as %s',max(hits),length(gene.names),max(hits)/length(gene.names)*100,class.names[best.hit]))
   
-  if (best.hit==1 | best.hit==2) organism.detected='human'
+  #if (best.hit==1 | best.hit==2) organism.detected='human'
+  if (best.hit==1 | best.hit==2) organism.detected='mouse'
   if (best.hit==3 | best.hit==4) organism.detected='mouse'
+  if (best.hit==1 | best.hit==4) organism.detected='mouse'
   if (best.hit==1 | best.hit==3) code.detected='gene.name'
-  if (best.hit==2 | best.hit==4) code.detected='ensembl'
+  if (best.hit==2 | best.hit==4) code.detected='gene.name'
   
-  if (organism.detected=='human')  GO.ann = as.list(org.Hs.eg.db::org.Hs.egGO2ALLEGS)
-  if (organism.detected=='mouse')  GO.ann = as.list(org.Mm.eg.db::org.Mm.egGO2ALLEGS)
-
-  regulators.entrez <- GO.ann$`GO:0010468`
+   if (organism.detected=='mouse')  GO.ann = as.list(org.Mm.eg.db::org.Mm.egGO2ALLEGS)
   
-  if (organism.detected=='human' & code.detected=='gene.name')  org.ann=as.list(org.Hs.eg.db::org.Hs.egSYMBOL)
-  if (organism.detected=='human' & code.detected=='ensembl')  org.ann=as.list(org.Hs.eg.db::org.Hs.egENSEMBL)
-  if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
-  if (organism.detected=='mouse' & code.detected=='ensembl') org.ann=as.list(org.Mm.eg.db::org.Mm.egENSEMBL)
+  
+  GO.ann$GeneName <- c(gene.names)
+  names(GO.ann$GeneName) <- GO.ann$GeneName
+  regulators.entrez <- GO.ann$GeneName
+  
+  if (path==1) regulators.entrez <- GO.ann$`GO:0010468`
+  if (path==2) regulators.entrez <- GO.ann$GeneName
+  
+   
+    
+  #regulators.entrez <- GO.ann$`GO:0010468`
+  
+  
+  gene.names1 <- as.list(gene.names)
+  names(gene.names1) <- c(gene.names)
+  
+   #if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
+  if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(gene.names1)
   
   
   regulators=unique(unlist(org.ann[regulators.entrez]))
@@ -2276,7 +2289,7 @@ compute.network.model = function (expr.data)
 #' @export
 
   
-compute.network = function (expr.data,gene.names,modality='pca',model=NA,clustering='recursive',quantile.p=0.9,speed.preset='slow',previous.output=NA){
+compute.network = function (expr.data,gene.names,modality='pca',model=NA,clustering='recursive',quantile.p=0.9,speed.preset='slow',previous.output=NA,path=1){
 
 if (is.na(previous.output))  
   {
