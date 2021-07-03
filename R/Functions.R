@@ -2303,7 +2303,7 @@ compute.network.model = function (expr.data)
 #' @export
 
   
-compute.network = function (expr.data,gene.names,modality='pca',model=NA,clustering='recursive',quantile.p=0.9,speed.preset='slow',previous.output=NA,path=path,lncs=NA){
+compute.network = function (expr.data,gene.names,modality='pca',model=NA,clustering='recursive',quantile.p=0.9,speed.preset='slow',previous.output=NA,path=NA,lncs=NA){
     print(sprintf('1st pass %g paths ',path))
     print(sprintf('1st pass %g lncs ',length(lncs))) 
 if (is.na(previous.output))  
