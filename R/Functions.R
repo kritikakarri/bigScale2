@@ -2002,7 +2002,7 @@ compare.centrality <- function(centralities,names.conditions)
 
 
 
-polish.graph = function (G,path)
+polish.graph = function (G,path,lncs)
 {
   # if(organism=='human')
   #   {
@@ -2019,18 +2019,24 @@ polish.graph = function (G,path)
   #       stop('Ask the programmer to add other organisms')
   
   gene.names=igraph::vertex_attr(graph = G,name = 'name')
-  
   mapped=list()
   org.ann=list()
-  org.ann[[1]]=as.list(gene.names)
-  #org.ann[[2]]=as.list(gene.names)
-  #org.ann[[3]]=as.list(org.Mm.eg.db::org.Mm.egALIAS2EG)
+  m1=which(is.element(gene.names,lncs))
+  lnc1 = (gene.names[m1])
+  lnc= as.list(lnc1)
+  names(lnc) <- c(lnc1)
+  
+  if(path==1) org.ann[[1]]=as.list(org.Mm.eg.db::org.Mm.egALIAS2EG)
+  if(path==2)org.ann[[1]]=as.list(gene.names)
+  if(path==3) org.ann[[1]]=as.list(gene.names)
+  
   #org.ann[[3]]=as.list(gene.names)
   #org.ann[[4]]=as.list(gene.names)
   #class.names=c('Human, Gene Symbol','Human, ENSEMBL','Mouse, Gene Symbol','Mouse, ENSEMBL')
   class.names=c('Mouse, Gene Symbol')
-  #mapped$map1=which(is.element(gene.names,names(org.ann[[1]])))
-  mapped$map1=which(is.element(gene.names,(org.ann[[1]])))
+  if(path==1) mapped$map1=which(is.element(gene.names,names(org.ann[[1]])))
+  if(path==2) mapped$map1=which(is.element(gene.names,(org.ann[[1]])))
+  if(path==3) mapped$map1=which(is.element(gene.names,(org.ann[[1]])))
    
   hits=unlist(lapply(mapped, length))
   best.hit=which(hits==max(hits))
@@ -2045,29 +2051,38 @@ polish.graph = function (G,path)
   if (best.hit==1 | best.hit==3) code.detected='gene.name'
   if (best.hit==2 | best.hit==4) code.detected='gene.name'
   
-   if (organism.detected=='mouse')  GO.ann = as.list(org.Mm.eg.db::org.Mm.egGO2ALLEGS)
+  if (organism.detected=='mouse')  GO.ann = as.list(org.Mm.eg.db::org.Mm.egGO2ALLEGS)
   
   
   GO.ann$GeneName <- c(gene.names)
   names(GO.ann$GeneName) <- GO.ann$GeneName
-  regulators.entrez <- GO.ann$GeneName
+  GO.ann$lnc <- c(lnc1)
+  names(GO.ann$lnc) <- GO.ann$lnc
   
   if (path==1) regulators.entrez <- GO.ann$`GO:0010468`
   if (path==2) regulators.entrez <- GO.ann$GeneName
-  
-   
+  if (path==3) {
+    regulators.entrez_old <- GO.ann$`GO:0010468`
+    org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
+    regulators_old=unique(unlist(org.ann[regulators.entrez_old]))
+    regulators.entrez <- c(GO.ann$lnc,regulators_old)
     
+  }
   #regulators.entrez <- GO.ann$`GO:0010468`
   
   
   gene.names1 <- as.list(gene.names)
   names(gene.names1) <- c(gene.names)
   
-   #if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
-  if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(gene.names1)
+  if (path==1 & organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
+  if (path==2 & organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(gene.names1)
   
+  if(path==1| path==2) regulators=unique(unlist(org.ann[regulators.entrez]))
+  if(path==3) regulators=regulators.entrez
+print(sprintf('Recognized regultors  %g',length(regulators)))
+   
   
-  regulators=unique(unlist(org.ann[regulators.entrez]))
+   length(regulators)
   
   end.nodes=igraph::ends(G,igraph::E(G))
   testing=Rfast::rowsums(cbind(is.element(end.nodes[,1],regulators),is.element(end.nodes[,2],regulators)))
@@ -2075,8 +2090,7 @@ polish.graph = function (G,path)
   G=igraph::delete_vertices(G, which(igraph::degree(G)==0))
   
   return(G)
-  
-}
+  }
   
 
 #' ATAC-seq Gene regulatory network
@@ -2481,7 +2495,7 @@ colnames(Df)=gene.names
 
 print(sprintf('Inferred the raw regulatory network: %g nodes and %g edges (ratio E/N)=%f',length(igraph::V(G)),length(igraph::E(G)),length(igraph::E(G))/length(igraph::V(G))))
 path=path
-G=polish.graph(G,path)
+G=polish.graph(G,path,lncs)
 comp=igraph::components(G)
 small.comp=which(comp$csize<0.01*sum(comp$csize))
 to.remove=which(is.element(comp$membership,small.comp))
