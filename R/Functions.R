@@ -2449,8 +2449,8 @@ print(o)
 Dp=Rfast::cora(tot.scores)
 o=gc()
 print(o)
-print(sprintf('2nd pass %g paths ',path))
-print(sprintf('2nd pass %g lncs ',length(lncs)))
+print(sprintf('3rd pass %g paths ',path))
+print(sprintf('3rd pass %g lncs ',length(lncs)))
     
 if (quantile.p>1)
   {
@@ -2499,8 +2499,8 @@ colnames(Df)=gene.names
 
 
 print(sprintf('Inferred the raw regulatory network: %g nodes and %g edges (ratio E/N)=%f',length(igraph::V(G)),length(igraph::E(G)),length(igraph::E(G))/length(igraph::V(G))))
-print(sprintf(' 3rd pass %g paths ',path))
-print(sprintf('3rd pass %g lncs ',length(lncs)))
+print(sprintf('4th pass %g paths ',path))
+print(sprintf('4th pass %g lncs ',length(lncs)))
 G=polish.graph(G,path=path,lncs=lncs)
 comp=igraph::components(G)
 small.comp=which(comp$csize<0.01*sum(comp$csize))
