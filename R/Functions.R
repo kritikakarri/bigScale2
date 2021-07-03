@@ -1,4 +1,343 @@
 
+#' homogenize.networks
+#' @param input.networks A list with in which each element is the output of a previous compute.network()
+#' @param tick Pearson correlation steps sued to homogenize the numner of edges. The smallest the larger the computational time but the better the homogenization.
+#' @examples
+#' homogenize.networks(list(output1,output2))
+#' @export
+homogenize.networks<-function(input.networks){
+    
+    input.networks=homogenize.networks.internal(input.networks,tick = 0.025)
+    input.networks=homogenize.networks.internal(input.networks,tick = 0.01)
+    input.networks=homogenize.networks.internal(input.networks,tick = 0.0025)
+    input.networks=homogenize.networks.internal(input.networks,tick = 0.001)
+    return(input.networks)
+  }
+
+
+
+
+homogenize.networks.internal<-function(input.networks,tick){
+  
+  edges=c()
+  cutoff=c()
+  for (k in 1:length(input.networks))
+  {
+    edges[k]=igraph::gsize(input.networks[[k]]$graph)
+    cutoff[k]=input.networks[[k]]$cutoff.p
+  }
+  
+  print('Number of edges for each network')
+  print(edges)
+  median.edges=median(edges)+1
+  print(sprintf('Aiming at %g edges for each network',median.edges))
+  
+  if (sum(edges==median.edges)>0)
+    error('One network has exactly the amount of edges we are aiming to. This will cause an infinite loop. In the very rare case plese contact developer at gio.iacono.work@gmail.com')
+  
+  for (k in 1:length(input.networks))
+  {
+    dynamic.tick=tick
+    
+    gap=edges[k]-median.edges
+    tick.sign=sign(gap)
+    dynamic.tick=tick.sign*tick
+    
+    while(1)
+    {
+      dummy=compute.network(previous.output = input.networks[[k]],quantile.p = (cutoff[k]+dynamic.tick))
+      new.gap=igraph::gsize(dummy$graph)-median.edges
+      if (abs(new.gap)>abs(gap))
+        break
+      else
+      {
+        input.networks[[k]]=dummy
+        gap=new.gap
+        dynamic.tick=dynamic.tick+tick.sign*tick
+      }
+    }
+  }
+  
+  return(input.networks)
+  
+}
+
+
+
+batch.normalize<-function(mat,sizeF){
+  
+  blockS=min(5000,ncol(mat))
+  avg.library.size=mean(sizeF)
+  A=1
+  B=A+blockS-1
+  last.round=0
+  
+  pb <- progress::progress_bar$new(format = "Normalizing cells [:bar] :current/:total (:percent) eta: :eta", total = ncol(mat))
+  
+  for (k in 1:ceiling(ncol(mat)/blockS))
+  {
+    dummy=as.matrix(mat[,A:B])*avg.library.size
+    for (h in 1:ncol(dummy))
+      dummy[,h]=dummy[,h]/sizeF[h]
+    
+    #start_time <- Sys.time()
+    if (k==1)
+      output.mat=Matrix::Matrix(dummy)
+    else
+      output.mat=cbind(output.mat,Matrix::Matrix(dummy))
+    #end_time <- Sys.time()
+    #print(end_time - start_time)
+    A=A+blockS
+    B=B+blockS
+    pb$tick(B-A+1)
+    if (A > ncol(mat)) break
+    if (B > ncol(mat)) B=ncol(mat)
+  }
+  return(output.mat)
+}
+
+
+
+#' bigscale.toCytoscape
+#' @param G The graph in igraph format previoulsy calculated with compute.network
+#' @param file.name Directory and/or name of the Cytoscape file 
+#' @examples
+#' bigscale.toCytoscape(G,'graph.json')
+#' @export
+
+toCytoscape <- function (G, file.name) {
+  # Extract graph attributes
+  library(igraph)
+  graph_attr = graph.attributes(G)
+  
+  # Extract nodes
+  node_count = length(V(G))
+  if('name' %in% list.vertex.attributes(G)) {
+    V(G)$id <- V(G)$name
+  } else {
+    V(G)$id <- as.character(c(1:node_count))
+  }
+  
+  nodes <- V(G)
+  v_attr = vertex.attributes(G)
+  v_names = list.vertex.attributes(G)
+  
+  nds <- array(0, dim=c(node_count))
+  for(i in 1:node_count) {
+    if(i %% 1000 == 0) {
+      print(i)
+    }
+    nds[[i]] = list(data = mapAttributes(v_names, v_attr, i))
+  }
+  
+  edges <- get.edgelist(G)
+  edge_count = ecount(G)
+  e_attr <- edge.attributes(G)
+  e_names = list.edge.attributes(G)
+  
+  attr_exists = FALSE
+  e_names_len = 0
+  if(identical(e_names, character(0)) == FALSE) {
+    attr_exists = TRUE
+    e_names_len = length(e_names)
+  }
+  e_names_len <- length(e_names)
+  
+  eds <- array(0, dim=c(edge_count))
+  for(i in 1:edge_count) {
+    st = list(source=toString(edges[i,1]), target=toString(edges[i,2]))
+    
+    # Extract attributes
+    if(attr_exists) {
+      eds[[i]] = list(data=c(st, mapAttributes(e_names, e_attr, i)))
+    } else {
+      eds[[i]] = list(data=st)
+    }
+    
+    if(i %% 1000 == 0) {
+      print(i)
+    }
+  }
+  
+  el = list(nodes=nds, edges=eds)
+  
+  x <- list(data = graph_attr, elements = el)
+  print("Done.  Writing Json...")
+  #return (toJSON(x))
+  
+  #merda<<-jsonlite::toJSON(x)
+  fileConn<-file(file.name)
+  writeLines(RJSONIO::toJSON(x), fileConn)
+  close(fileConn)
+  
+  
+}
+
+
+mapAttributes <- function(attr.names, all.attr, i) {
+  attr = list()
+  cur.attr.names = attr.names
+  attr.names.length = length(attr.names)
+  
+  for(j in 1:attr.names.length) {
+    if(is.na(all.attr[[j]][i]) == FALSE) {
+      #       attr[j] = all.attr[[j]][i]
+      attr <- c(attr, all.attr[[j]][i])
+    } else {
+      cur.attr.names <- cur.attr.names[cur.attr.names != attr.names[j]]
+    }
+  }
+  names(attr) = cur.attr.names
+  return (attr)
+}
+
+
+
+
+
+#' bigscale.generate.report
+#' @param sce The single cell object for which you want to generate the report
+#' @param file.name Directory and/or name of the excel file containing the formatted report
+#' @examples
+#' bigscale.generate.report('report.xlsx')
+#' @export
+
+
+bigscale.generate.report = function(sce,file.name)
+{
+  export.data=as.data.frame(as.numeric(table(getClusters(sce))))
+  
+  colnames(export.data)='Cell number'
+  
+  avg.lib.size=c()
+  dummy=sizeFactors(sce)
+  for (k in 1:max(getClusters(sce)))
+    avg.lib.size[k]=mean(dummy[which(getClusters(sce)==k)])
+  
+  avg.det.genes=c()
+  for (k in 1:max(getClusters(sce)))
+    avg.det.genes[k]=mean(Rfast::colsums(as.matrix(normcounts(sce)[,which(getClusters(sce)==k)]>0)))
+  
+  export.data$Average_Library_Size=avg.lib.size
+  export.data$Average_Detected_Genes=avg.det.genes
+  export.data$Complexity=avg.lib.size/avg.det.genes
+  
+  export.data$Markers_Lv1=sce@int_metadata$Mlist.counts$Markers_LV1
+  export.data$Markers_Lv2=sce@int_metadata$Mlist.counts$Markers_LV2
+  
+  #R.utils::copyFile(paste(system.file(package="bigSCale"),'/data/template.xlsx',sep = ''),file.name)
+  
+  
+  #Level 1 markers
+  Mlist=getMarkers(sce)
+  to.write=Mlist[[1,1]][1,]
+  for (k in 2:max(getClusters(sce)))
+    to.write=rbind(to.write,Mlist[[k,1]][1,])
+ export.data=cbind(export.data,to.write[,2:4])
+  
+  
+  #Level 1 markers
+  to.write=Mlist[[1,2]][1,]
+  for (k in 2:max(getClusters(sce)))
+    to.write=rbind(to.write,Mlist[[k,2]][1,])
+  export.data=cbind(export.data,to.write[,2])
+  
+  names=colnames(export.data)
+  names[7]='Best Lv1'
+  names[10]='Best Lv2'
+  
+  colnames(export.data)=names
+  xlsx::write.xlsx(export.data,file.name)
+}
+
+
+
+pharse.10x.peaks = function(file,keep='promoter',reject='distal')
+{
+  peaks = read.delim(file, header=FALSE, stringsAsFactors=FALSE)
+  peaks=peaks[-1,]
+  good.ix=rep(0,nrow(peaks))
+  feature.names=c()
+  for (k in 1:nrow(peaks))
+  {
+    if (peaks[k,4]!=reject)
+    {
+      types=unlist(strsplit(peaks[k,4], ";"))
+      genes=unlist(strsplit(peaks[k,2], ";"))
+      for ( h in 1:length(types))
+      {
+        if (types[h]==keep)
+        {
+          good.ix[k]=1
+          if (h==1) feature.names[k]=genes[h]
+          else { feature.names[k]=paste(feature.names[k],';', genes[h]) }
+        }
+      }
+    }
+  }
+  return(list(feature.names=feature.names[which(good.ix==1)],good.ix=which(good.ix==1)))
+}
+
+
+
+pick.sequences = function(file, numbers=NA)
+{
+  library("BSgenome.Hsapiens.UCSC.hg19")
+  peaks = read.delim(file, header=FALSE, stringsAsFactors=FALSE) 
+  if (is.na(numbers[1]))
+    numbers=c(1:nrow(peaks))
+  sequences=getSeq(Hsapiens, as.character(peaks[numbers,1]), start=peaks[numbers,2],end=peaks[numbers,3])
+}
+
+sub.communities <- function(G,dim,module)
+{
+  mycl.new=rep(0,length(igraph::V(G)))
+  unclusterable=mycl.new  
+  
+  #node.names=V(G)$names
+  #node.ix=c(1:length(igraph::V(G)))
+  
+  mycl=igraph::cluster_louvain(G,weights = NULL)$membership
+  cat(sprintf('\n Starting from %g clusters',max(mycl)))
+  #current.nodes=node.ix
+  round=1
+  while (1)
+  {
+    action.taken=0
+    for (k in 1:max(mycl))
+    {
+      ix=which(mycl==k)  
+      if (length(ix)>dim & sum(unclusterable[ix])==0 )
+      {
+        G.sub=igraph::induced.subgraph(graph = G,vids = which(mycl == k))
+        out=igraph::cluster_louvain(G.sub,weights = NULL)$membership
+        mycl.new[ix]=out+max(mycl.new)
+        action.taken=1
+      }
+      else
+      {
+        mycl.new[ix]=1+max(mycl.new)
+        unclusterable[ix]=1 
+      }
+    }
+    round=round+1
+    cat(sprintf('\n Round %g) Obtained %g clusters',round,max(mycl.new)))  
+    if (action.taken==0) 
+      break
+    else
+    {
+      mycl=mycl.new
+      mycl.new=rep(0,length(igraph::V(G)))
+    }
+  }
+  
+  
+  return(mycl)
+  
+}
+
+
+
 Pdistance <- function(counts) {
 
   counts=counts>0
@@ -1429,14 +1768,8 @@ return(max.all.inter)
 
 
 
-bigscale.recursive.clustering = function (expr.data.norm,model,edges,lib.size,fragment=FALSE,create.distances=FALSE,modality='bigscale') {
+bigscale.recursive.clustering = function (expr.data.norm,model,edges,lib.size,fragment=FALSE,create.distances=FALSE,modality) {
   
-
-if (class(expr.data.norm)=='big.matrix')
-  {
-  expr.data.norm=bigmemory::as.matrix(expr.data.norm)
-  expr.data.norm=Matrix::Matrix(expr.data.norm) 
-  }
  
 gc()
   
@@ -1446,14 +1779,18 @@ num.samples=ncol(expr.data.norm)
 if (fragment==FALSE)
   {
   # Adjusting max_group_size according to cell number
-  if (num.samples<5000) dim.cutoff=50
+  if (num.samples<1000) dim.cutoff=10
+  if (num.samples>=1000 & num.samples<5000) dim.cutoff=50
   if (num.samples>=5000 & num.samples<10000) dim.cutoff=100
   if (num.samples>=10000) dim.cutoff=150
   }
 else
 {
   if (fragment==TRUE)
-    dim.cutoff=50
+      {
+      if (num.samples<1000) dim.cutoff=10
+      else dim.cutoff=50
+      }
   else
     {
     dim.cutoff=fragment*ncol(expr.data.norm)
@@ -1486,7 +1823,7 @@ while(1){
     if (length(which(mycl==k))>dim.cutoff & sum(unclusterable[which(mycl==k)])==0 ) # then it must be re-clustered
     {
       #print('Computing Overdispersed genes ...')
-      ODgenes=calculate.ODgenes(expr.data.norm[,which(mycl==k)],verbose = FALSE)
+      ODgenes=calculate.ODgenes(expr.data.norm[,which(mycl==k)],verbose = FALSE,min_ODscore = 2)
       
       if (is.null(ODgenes))
         {
@@ -1685,44 +2022,36 @@ polish.graph = function (G)
   
   mapped=list()
   org.ann=list()
-  org.ann[[1]]=as.list(gene.names)
-  #org.ann[[2]]=as.list(gene.names)
-  #org.ann[[3]]=as.list(org.Mm.eg.db::org.Mm.egALIAS2EG)
-  #org.ann[[3]]=as.list(gene.names)
-  #org.ann[[4]]=as.list(gene.names)
-  #class.names=c('Human, Gene Symbol','Human, ENSEMBL','Mouse, Gene Symbol','Mouse, ENSEMBL')
-  class.names=c('Mouse, Gene Symbol')
-  #mapped$map1=which(is.element(gene.names,names(org.ann[[1]])))
-  mapped$map1=which(is.element(gene.names,(org.ann[[1]])))
-   
+  org.ann[[1]]=as.list(org.Hs.eg.db::org.Hs.egALIAS2EG)
+  org.ann[[2]]=as.list(org.Hs.eg.db::org.Hs.egENSEMBL2EG)
+  org.ann[[3]]=as.list(org.Mm.eg.db::org.Mm.egALIAS2EG)
+  org.ann[[4]]=as.list(org.Mm.eg.db::org.Mm.egENSEMBL2EG)
+  class.names=c('Human, Gene Symbol','Human, ENSEMBL','Mouse, Gene Symbol','Mouse, ENSEMBL')
+  mapped$map1=which(is.element(gene.names,names(org.ann[[1]])))
+  mapped$map2=which(is.element(gene.names,names(org.ann[[2]])))
+  mapped$map3=which(is.element(gene.names,names(org.ann[[3]])))
+  mapped$map4=which(is.element(gene.names,names(org.ann[[4]])))
+  
   hits=unlist(lapply(mapped, length))
   best.hit=which(hits==max(hits))
   rm(mapped,org.ann)
   gc()
-  print(sprintf('Recognized kritika %g/%g (%.2f%%) as %s',max(hits),length(gene.names),max(hits)/length(gene.names)*100,class.names[best.hit]))
+  print(sprintf('Recognized %g/%g (%.2f%%) as %s',max(hits),length(gene.names),max(hits)/length(gene.names)*100,class.names[best.hit]))
   
-  #if (best.hit==1 | best.hit==2) organism.detected='human'
-  if (best.hit==1 | best.hit==2) organism.detected='mouse'
+  if (best.hit==1 | best.hit==2) organism.detected='human'
   if (best.hit==3 | best.hit==4) organism.detected='mouse'
-  if (best.hit==1 | best.hit==4) organism.detected='mouse'
   if (best.hit==1 | best.hit==3) code.detected='gene.name'
-  if (best.hit==2 | best.hit==4) code.detected='gene.name'
+  if (best.hit==2 | best.hit==4) code.detected='ensembl'
   
-   if (organism.detected=='mouse')  GO.ann = as.list(org.Mm.eg.db::org.Mm.egGO2ALLEGS)
+  if (organism.detected=='human')  GO.ann = as.list(org.Hs.eg.db::org.Hs.egGO2ALLEGS)
+  if (organism.detected=='mouse')  GO.ann = as.list(org.Mm.eg.db::org.Mm.egGO2ALLEGS)
+
+  regulators.entrez <- GO.ann$`GO:0010468`
   
-  
-  GO.ann$GeneName <- c(gene.names)
-  names(GO.ann$GeneName) <- GO.ann$GeneName
-  regulators.entrez <- GO.ann$GeneName
-  
-  #regulators.entrez <- GO.ann$`GO:0010468`
-  
-  
-  gene.names1 <- as.list(gene.names)
-  names(gene.names1) <- c(gene.names)
-  
-   #if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
-  if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(gene.names1)
+  if (organism.detected=='human' & code.detected=='gene.name')  org.ann=as.list(org.Hs.eg.db::org.Hs.egSYMBOL)
+  if (organism.detected=='human' & code.detected=='ensembl')  org.ann=as.list(org.Hs.eg.db::org.Hs.egENSEMBL)
+  if (organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
+  if (organism.detected=='mouse' & code.detected=='ensembl') org.ann=as.list(org.Mm.eg.db::org.Mm.egENSEMBL)
   
   
   regulators=unique(unlist(org.ann[regulators.entrez]))
@@ -1776,9 +2105,17 @@ polish.graph = function (G)
 #' @export
 
 
-compute.atac.network = function (expr.data,feature.names,quantile.p=0.998){
+compute.atac.network = function (expr.data,feature.file,quantile.p=0.998){
   
   clustering='direct'
+  print('Pharsing the list of 10x annotated peaks')
+  out=pharse.10x.peaks(feature.file)
+  print(sprintf('Found %g peaks in promoters',length(out$good.ix)))
+  expr.data=expr.data[out$good.ix,]
+  feature.names=out$feature.names
+  peaks.in.use=out$good.ix
+  rm(out)
+  gc()
   
   if (ncol(expr.data)>20000)
       warning('It seems you are running compute.network on a kind of large dataset, it it failed for memory issues you should try the compute.network for large datasets')
@@ -1814,7 +2151,7 @@ compute.atac.network = function (expr.data,feature.names,quantile.p=0.998){
   o=gc()
   print(o)
   print('Calculating Pearson ...')
-  rm(list=setdiff(setdiff(ls(), lsf.str()), c('tot.scores','quantile.p','feature.names','tot.scores','mycl')))
+  rm(list=setdiff(setdiff(ls(), lsf.str()), c('tot.scores','quantile.p','feature.names','tot.scores','mycl','peaks.in.use')))
   o=gc()
   print(o)
   
@@ -1835,7 +2172,7 @@ compute.atac.network = function (expr.data,feature.names,quantile.p=0.998){
   gc()
   
   print('Calculating the significant links ...')
-  rm(list=setdiff(setdiff(ls(), lsf.str()), c("Dp","Ds","cutoff.p",'feature.names','tot.scores','mycl')))  
+  rm(list=setdiff(setdiff(ls(), lsf.str()), c("Dp","Ds","cutoff.p",'feature.names','tot.scores','mycl','peaks.in.use')))  
   gc()
   network=((Dp>cutoff.p & Ds>0.7) | (Dp<(-cutoff.p) & Ds<(-0.7)))
   diag(network)=FALSE
@@ -1860,20 +2197,44 @@ compute.atac.network = function (expr.data,feature.names,quantile.p=0.998){
   
   print(sprintf('Inferred the raw regulatory network: %g nodes and %g edges (ratio E/N)=%f',length(igraph::V(G)),length(igraph::E(G)),length(igraph::E(G))/length(igraph::V(G))))
   
-  
   print('Computing the centralities')
   Betweenness=igraph::betweenness(graph = G,directed=FALSE,normalized = TRUE)
   Degree=igraph::degree(graph = G)
   PAGErank=igraph::page_rank(graph = G,directed = FALSE)$vector
   Closeness=igraph::closeness(graph = G,normalized = TRUE)
-  
+
   if (cutoff.p<0.7)
     warning('bigSCale: the cutoff for the correlations seems very low. You should either increase the parameter quantile.p or select clustering=normal (you need to run the whole code again in both options,sorry!). For more information check the quick guide online')
   
-  return(list(graph=G,correlations=Df,tot.scores=tot.scores,clusters=mycl,centrality=as.data.frame(cbind(Degree,Betweenness,Closeness,PAGErank)),cutoff.p=cutoff.p))
+  return(list(graph=G,correlations=Df,tot.scores=tot.scores,clusters=mycl,centrality=as.data.frame(cbind(Degree,Betweenness,Closeness,PAGErank)),cutoff.p=cutoff.p,peaks.in.use=peaks.in.use[to.include]))
 }
 
 
+
+
+#' Compute network model
+#'
+#' Compute network model
+#'
+#' @param expr.data matrix of expression counts. Works also with sparse matrices of the \pkg{Matrix} package.
+#' @return  Model
+#'
+#'
+#' @examples
+#' out=compute.network.model(expr.data,gene.names)
+#'
+#' @export
+
+
+compute.network.model = function (expr.data)
+{
+  sce = SingleCellExperiment(assays = list(counts = expr.data))  
+  sce = preProcess(sce)
+  sce = storeNormalized(sce)
+  sce=setModel(sce)
+  return(list(model=sce@int_metadata$model,edges=sce@int_metadata$edges))
+}
+  
   
 #' Gene regulatory network
 #'
@@ -1887,7 +2248,8 @@ compute.atac.network = function (expr.data,feature.names,quantile.p=0.998){
 #'  \item {\bold{direct}} Best trade-off between quality and computational time. If you want to get a quick output not much dissimilar from the top quality of \bold{recursive} one use this option. Can handle quickly also large datasets (>15-20K cells in 30m-2hours depending on hardware)
 #'  \item {\bold{normal}} To be used if the correlations (the output value \bold{cutoff.p}) detected with either \bold{direct} or \bold{recursive} are too low. At the moment, bigSCale displays a warning if the correlation curoff is lower than 0.8 and suggests to eithe use \bold{normal} clustering or increase the input parameter \bold{quantile.p}
 #' }
-#' @param quantile.p only the first \eqn{1 - quantile.p} correlations are used to create the edges of the network. If the networ is too sparse(dense) decrease(increase) \eqn{quantile.p}
+#' @param quantile.p To select how many correlatoins are retained. By default \eqn{quantile.p=0.9} meaning that only Pearson Correlatins>0.9 are retained to create the network. If the number is higher than 1 then it is interpreted as a quantile, meaning tha only the first \eqn{1 - quantile.p} correlations are used to create the edges of the network. 
+#' If \eqn{0<quantile.p<1} ten it is interprested directly as the minimum Pearson correlation. If the networ is too sparse(dense) decrease(increase) \eqn{quantile.p}
 #' @param speed.preset Used only if  \code{clustering='recursive'} . It regulates the speed vs. accuracy of the Zscores calculations. To have a better network quality it is reccomended to use the default \bold{slow}.
 ##' \itemize{
 #'   \item {\bold{slow}} {Highly reccomended, the best network quality but the slowest computational time.} 
@@ -1914,7 +2276,7 @@ compute.atac.network = function (expr.data,feature.names,quantile.p=0.998){
 #' @export
 
   
-compute.network = function (expr.data,gene.names,clustering='recursive',quantile.p=0.998,speed.preset='slow',previous.output=NA){
+compute.network = function (expr.data,gene.names,modality='pca',model=NA,clustering='recursive',quantile.p=0.9,speed.preset='slow',previous.output=NA){
 
 if (is.na(previous.output))  
   {
@@ -1938,8 +2300,17 @@ if (is.na(previous.output))
   lib.size = Rfast::colsums(expr.data)
     
     
-  print('PASSAGE 2) Setting the bins for the expression data ....')
-  edges=generate.edges(expr.data)
+  
+  if (is.list(model))
+  {
+  print('Using edges given as input')
+  edges=model$edges
+  }
+  else
+  {
+    print('PASSAGE 2) Setting the bins for the expression data ....')
+    edges=generate.edges(expr.data)
+  }
     
   print('PASSAGE 3) Storing in the single cell object the Normalized data ....')
   avg.library.size=mean(lib.size)
@@ -1948,18 +2319,29 @@ if (is.na(previous.output))
   rm(expr.data)
   expr.data.norm=Matrix::Matrix(expr.data.norm)
   gc()
+  
+  if (is.list(model))
+    {
+    print('Using Model given in the input')
+    model=model$model
+    }
+  else
+    if (!(modality=='pca' & clustering=='direct'))
+    {  
+    print('PASSAGE 4) Computing the numerical model (can take from a few minutes to 30 mins) ....')
+    model=fit.model(expr.data.norm,edges,lib.size)$N_pct
+    gc()
+    }
     
-  print('PASSAGE 4) Computing the numerical model (can take from a few minutes to 30 mins) ....')
-  model=fit.model(expr.data.norm,edges,lib.size)$N_pct
-  gc()
+
     
   print('PASSAGE 5) Clustering ...')
   if (clustering=="direct" | clustering=="recursive")
     {
     if (clustering=="direct")
-      mycl=bigscale.recursive.clustering(expr.data.norm = expr.data.norm,model = model,edges = edges,lib.size = lib.size,fragment=TRUE)$mycl
+      mycl=bigscale.recursive.clustering(expr.data.norm = expr.data.norm,model = model,edges = edges,lib.size = lib.size,fragment=TRUE,modality=modality)$mycl
     if (clustering=="recursive")
-      mycl=bigscale.recursive.clustering(expr.data.norm = expr.data.norm,model = model,edges = edges,lib.size = lib.size)$mycl
+      mycl=bigscale.recursive.clustering(expr.data.norm = expr.data.norm,model = model,edges = edges,lib.size = lib.size,modality=modality)$mycl
     }
   else
     {
@@ -2037,8 +2419,18 @@ print(o)
 Dp=Rfast::cora(tot.scores)
 o=gc()
 print(o)
-print('Calculating quantile ...')
-cutoff.p=quantile(Dp,quantile.p,na.rm=TRUE)
+
+if (quantile.p>1)
+  {
+  print('Calculating correlation quantile associated with your quantile.p ...')
+  cutoff.p=quantile(Dp,quantile.p/100,na.rm=TRUE)
+  }
+else
+  {
+  print('Detacted quantile.p<1, using it directly as correlation treshold ...')
+  cutoff.p=quantile.p
+  }
+
 print(sprintf('Using %f as cutoff for pearson correlation',cutoff.p))
 
 
@@ -2091,6 +2483,11 @@ Betweenness=igraph::betweenness(graph = G,directed=FALSE,normalized = TRUE)
 Degree=igraph::degree(graph = G)
 PAGErank=igraph::page_rank(graph = G,directed = FALSE)$vector
 Closeness=igraph::closeness(graph = G,normalized = TRUE)
+
+G=igraph::set.vertex.attribute(graph = G,name = 'bigSCale.Degree',value = Degree)
+G=igraph::set.vertex.attribute(graph = G,name = 'bigSCale.PAGErank',value = PAGErank)
+G=igraph::set.vertex.attribute(graph = G,name = 'bigSCale.Closeness',value = Closeness)
+G=igraph::set.vertex.attribute(graph = G,name = 'bigSCale.Betweenness',value = Betweenness)
 
 if (cutoff.p<0.7)
   warning('bigSCale: the cutoff for the correlations seems very low. You should either increase the parameter quantile.p or select clustering=normal (you need to run the whole code again in both options,sorry!). For more information check the quick guide online')
@@ -2472,18 +2869,22 @@ bigSCale.tsne.plot = function (tsne.data,color.by,fig.title,colorbar.title,clust
 set.quantitative.palette = function(tot.el){
   
   gc()
-  
-  if (tot.el<3)
-    palette=randomcoloR::distinctColorPalette(tot.el)
-  else
-    if (tot.el<=11)
+  if (tot.el<=11)
       {
       palette=c('#ffe119', '#4363d8', '#f58231', '#e6beff', '#800000', '#000075', '#a9a9a9', '#000000','#FF0000','#fffac8','#f032e6')
       palette=palette[1:tot.el]
       #https://sashat.me/2017/01/11/list-of-20-simple-distinct-colors/
       }
     else
-      palette=randomcoloR::distinctColorPalette(tot.el)
+    {
+      #palette=c('#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabebe', '#469990', '#e6beff', '#9A6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#a9a9a9', '#ffffff', '#000000')
+      #if (tot.el>length(palette))
+      #  stop('You have more than 22 clusters and I cannot find enough colors for them. Contact the developer at gio.iacono.work@gmail.com to fix this issue')
+      #palette=palette[1:tot.el]
+      #https://sashat.me/2017/01/11/list-of-20-simple-distinct-colors/
+      color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)]
+      palette=sample(color, tot.el, replace = FALSE)
+    }
 
     
   
@@ -2969,10 +3370,16 @@ if (plot.graphic)
 factor1=max(DE.scores.wc[!is.infinite(DE.scores.wc)])/max(DE.scores[!is.na(DE.scores)])
 factor2=min(DE.scores.wc[!is.infinite(DE.scores.wc)])/min(DE.scores[!is.na(DE.scores)])
 factor=mean(c(factor1,factor2))
-
+# print(max(DE.scores.wc[!is.infinite(DE.scores.wc)]))
+# print(max(DE.scores[!is.na(DE.scores)]))
+# print(factor1)
+# print(min(DE.scores.wc[!is.infinite(DE.scores.wc)]))
+# print(min(DE.scores[!is.na(DE.scores)]))
+# print(factor2)
 if (is.infinite(factor) | factor<0)
+{
   stop('Problems with the factor')
-
+}
 #print(sprintf('Factor1 %.2f, factor2 %.2f, average factor %.2f',factor1,factor2,factor))
 
 DE.scores.wc=DE.scores.wc/factor
@@ -2998,7 +3405,7 @@ gc()
     error('Error of the stupid biSCale2 programmer!')
   
 ht=hclust(as.dist(D),method='ward.D')
-
+ht$height=round(ht$height,6)
 
 
 if (is.na(cut.depth) & clustering.method=='high.granularity')
@@ -3021,8 +3428,10 @@ if (is.na(cut.depth) & clustering.method=='high.granularity')
 if (is.na(cut.depth) & clustering.method=='low.granularity')
 {
 
+  
   result=c()
   progressive.depth=c(90, 80, 70, 60, 50, 40, 30, 20, 15, 10)
+  
   for (k in 1:length(progressive.depth))
   {
     mycl <- cutree(ht, h=max(ht$height)*progressive.depth[k]/100)
@@ -3093,14 +3502,37 @@ return(list(clusters=clusters,ht=ht))
 }
 
 
-compute.distances = function (expr.norm, N_pct , edges, driving.genes , genes.discarded,lib.size,modality='bigscale'){
+compute.distances = function (expr.norm, N_pct , edges, driving.genes , genes.discarded,lib.size,modality='pca',pca.components=25){
+  
+  
+  print(sprintf('Proceeding to calculated cell-cell distances with %s modality',modality))
   
   if (modality=='jaccard')
       {
       print("Calculating Jaccard distances ...")
       D=as.matrix(jaccard_dist_text2vec_04(x = Matrix::Matrix( t(as.matrix(expr.norm[driving.genes,]>0)), sparse = T  )))
       return(D)
-      }  
+      }
+ 
+  if (modality=='pca')
+  {
+    
+    
+    print(sprintf('Using %g PCA components for %g genes and %g cells',pca.components,length(driving.genes),ncol(expr.norm)))
+    if(max(expr.norm)==1)
+      {
+      print('Detecting ATAC-seq data...')
+      dummy=svd(expr.norm[driving.genes,],0,pca.components)  
+      }
+      else
+      dummy=svd(log10(expr.norm[driving.genes,]+1),0,pca.components)
+    
+    for (k in 1:ncol(dummy$v))
+      dummy$v[,k]=dummy$v[,k]*dummy$d[k]
+    print('Computing distance from PCA data...')
+    D=dist(dummy$v,method = 'euclidean')
+    return(D) # is a distance object
+  }  
   
   # normalize expression data for library size without scaling to the overall average depth
   if (class(expr.norm)=='big.matrix')
@@ -3108,8 +3540,6 @@ compute.distances = function (expr.norm, N_pct , edges, driving.genes , genes.di
   else
     expr.driving.norm=as.matrix(expr.norm[driving.genes,])/mean(lib.size)
   gc()
-  
-  print(sprintf('Proceeding to calculated cell-cell distances with %s modality',modality))
   
   if (modality=='correlation')
     {
@@ -3476,6 +3906,7 @@ calculate.ODgenes = function(expr.norm,min_ODscore=2.33,verbose=TRUE,use.exp=c(0
   
   #start.time <- Sys.time() 
   
+    
   num.samples=ncol(expr.norm) 
   num.genes=nrow(expr.norm) 
   min.cells=max( 15,  round(0.002*length(expr.norm[1,]))) 
@@ -3488,23 +3919,31 @@ calculate.ODgenes = function(expr.norm,min_ODscore=2.33,verbose=TRUE,use.exp=c(0
   # Discarding skewed genes
   if (verbose)
     print('Discarding skewed genes')
-  expr.row.sorted=Rfast::rowSort(expr.norm) #MEMORY ALERT with Rfast::sort_mat
-  a=Rfast::rowmeans(expr.row.sorted[,(num.samples-skwed.cells):num.samples])
-  La=log2(a)
-  B=Rfast::rowVars(expr.row.sorted[,(num.samples-skwed.cells):num.samples], suma = NULL, std = TRUE)/a
-  rm(expr.row.sorted)
-  gc()
-  f=smooth.spline(x=La[La>0],y=B[La>0],df = 12) # smoothing sline approximatinf the La/B relationship
-  yy=approx(f$x,f$y,La)$y # smoothing spline calculate on each exact value of La
-
-  skewed=rep(0,length(yy))
-  skewed_genes=which(B/yy>4)
-  skewed[skewed_genes]=1
   
-  df=as.data.frame(t(rbind(La,B,yy,skewed)))
-  df$skewed=as.factor(df$skewed)
-  g1=ggplot2::ggplot(df) + ggplot2::ggtitle('Discarding skewed genes')  + ggplot2::geom_point(ggplot2::aes(x=La, y=B,color=skewed),alpha=0.5)  + ggplot2::scale_color_manual(breaks = c("0", "1"),values=c("gray", "red")) + ggplot2::geom_line(ggplot2::aes(x=La, y=yy),colour="black")
-  
+  if (max(expr.norm>1))
+      {
+      expr.row.sorted=Rfast::rowSort(expr.norm) #MEMORY ALERT with Rfast::sort_mat
+      a=Rfast::rowmeans(expr.row.sorted[,(num.samples-skwed.cells):num.samples])
+      La=log2(a)
+      B=Rfast::rowVars(expr.row.sorted[,(num.samples-skwed.cells):num.samples], suma = NULL, std = TRUE)/a
+      rm(expr.row.sorted)
+      gc()
+      f=smooth.spline(x=La[La>0],y=B[La>0],df = 12) # smoothing sline approximatinf the La/B relationship
+      yy=approx(f$x,f$y,La)$y # smoothing spline calculate on each exact value of La
+    
+      skewed=rep(0,length(yy))
+      skewed_genes=which(B/yy>4)
+      skewed[skewed_genes]=1
+       df=as.data.frame(t(rbind(La,B,yy,skewed)))
+      df$skewed=as.factor(df$skewed)
+      g1=ggplot2::ggplot(df) + ggplot2::ggtitle('Discarding skewed genes')  + ggplot2::geom_point(ggplot2::aes(x=La, y=B,color=skewed),alpha=0.5)  + ggplot2::scale_color_manual(breaks = c("0", "1"),values=c("gray", "red")) + ggplot2::geom_line(ggplot2::aes(x=La, y=yy),colour="black")
+      }
+    else
+      {
+      skewed_genes=c()
+      g1=plot(1,1)
+      }
+ 
   
   
   
@@ -3793,7 +4232,13 @@ generate.edges<-function(expr.data){
   #   edges[length(edges)+1]=Inf
   #   return(edges)
   #   }
-  
+  if (ncol(expr.data)>6000)
+  {
+  print('Subsetting dataset...')
+  ix=sample(c(1:ncol(expr.data)),5000)
+  expr.data=expr.data[,ix]    
+  }
+  print('Creating edges...')
   percentage.exp=(sum(expr.data<10 & expr.data>0)/sum(expr.data>0))
   # Testing how many nonzeros values are below 70, if number is large than we have UMIs like distribution
   if (percentage.exp>0.9)
@@ -3847,20 +4292,12 @@ generate.edges<-function(expr.data){
 }
 
 transform.matrix<-function(expr.norm,case){
-  
-  
-  if (class(expr.norm)=='big.matrix')
-    {
-    expr.norm=bigmemory::as.matrix(expr.norm)
-    memory.save.active=TRUE
-    }
-  else
-    {
-    expr.norm=as.matrix(expr.norm)
-    memory.save.active=FALSE
-    } 
-  
+
   print('Computing transformed matrix ...')
+  print('Converting sparse to full Matrix ...')
+  
+  expr.norm=as.matrix(expr.norm)
+  
   
   if (case==2)# model=2. Log(x+1), 
     expr.norm=log2(expr.norm+1)
@@ -3879,12 +4316,6 @@ transform.matrix<-function(expr.norm,case){
     expr.norm[k,]=shift.values(expr.norm[k,],0,1)
   #t(apply(expr.norm, 1,shift.values,A=0,B=1))
   
-  if (memory.save.active==TRUE & case==4)
-    {
-    print('saving to swap transformed matrix ...')  
-    expr.norm=bigmemory::as.big.matrix(expr.norm)#,backingfile = 'transcounts.bin',backingpath = getwd())
-    }
-
   
   gc()
   return(expr.norm)
@@ -3984,7 +4415,7 @@ id.map<-function(gene.list,all.genes){
 #' @seealso    
 #' [ViewSignatures()]  
 
-bigscale = function (sce,speed.preset='slow',compute.pseudo=TRUE, memory.save=FALSE, clustering='normal'){
+bigscale = function (sce,modality='pca',speed.preset='slow',compute.pseudo=TRUE, clustering='normal'){
   
 if ('counts' %in% assayNames(sce))
   {
@@ -3992,64 +4423,43 @@ if ('counts' %in% assayNames(sce))
    sce=preProcess(sce)
   
    print('PASSAGE 2) Storing the Normalized data ....')
-   sce = storeNormalized(sce,memory.save)
+   sce = storeNormalized(sce)
 
    print('PASSAGE 3) Computing the numerical model (can take from a few minutes to 30 mins) ....')
+   if (!(modality=='pca' & speed.preset=='fast'))
    sce=setModel(sce)
+  }
+  
+  print('Computing Overdispersed genes ...')
+  sce=setODgenes(sce)#favour='high'
 
-    print('PASSAGE 4) Storing the Normalized-Transformed data (needed for some plots) ....')
-   sce = storeTransformed(sce)
-  }
+ if (modality=='pca')
+   sce=setDCT(sce) 
   
-  else
-    
+ else # bigscale pipeline
   {
-    sce = storeNormalized(sce,memory.save)
-    sce = storeTransformed(sce)
-  }
-  
- if (clustering=='normal')
-    {
-    print('PASSAGE 5) Computing Overdispersed genes ...')
-    sce=setODgenes(sce)#favour='high'
- 
-    print('PASSAGE 6) Computing cell to cell distances ...')
-    sce=setDistances(sce)
+  print('Storing the Normalized-Transformed data (needed for some plots) ....')
+  sce = storeTransformed(sce)
     
-    print('PASSAGE 8) Computing the clusters ...')
-    sce=setClusters(sce)
+  if (clustering=='normal')
+    {
+    print('Computing cell to cell distances ...')
+    sce=setDistances(sce,modality = modality)
     }
   else
     {
-    print('PASSAGE 5-6) Going for recursive clustering')
+    print('Going for recursive clustering')
     sce=RecursiveClustering(sce)
     }
-    
-
- 
- print('PASSAGE 7) Computing TSNE ...')
- sce=storeTsne(sce)
- 
-
- if (compute.pseudo)
-    {
-    print('PASSAGE 9) Storing the pseudotime order ...')
-    sce=storePseudo(sce)
-    }
-   
-
- print('PASSAGE 10) Computing the markers (slowest part) ...')
- sce=computeMarkers(sce,speed.preset=speed.preset)
- 
- 
- print('PASSAGE 11) Organizing the markers ...')
- sce=setMarkers(sce)
- 
- if (memory.save==TRUE)
-  { 
-  print('PASSAGE 12) Restoring full matrices of normalized counts and transformed counts...')
-  sce=restoreData(sce)
+  sce=storeTsne(sce)
   }
+  
+  sce=setClusters(sce)
+  print('Computing the markers (slowest part) ...')
+  sce=computeMarkers(sce,speed.preset=speed.preset)
+  print('Organizing the markers ...')
+  sce=setMarkers(sce)
+ 
 
  return(sce)
  
@@ -4081,35 +4491,19 @@ if ('counts' %in% assayNames(sce))
 #' @export
 
 
-bigscale.atac = function (sce, memory.save=FALSE, fragment=0.1){
+bigscale.atac = function (sce,pca.components=25){
   
-  if ('counts' %in% assayNames(sce))
+if ('counts' %in% assayNames(sce))
   {
-    
-    #print('PASSAGE 1) Imputing ATAC data')
-    #sce=ATACimpute(sce)
-    
-    print('PASSAGE 2) Per-processing the dataset')
-    sce=preProcess(sce,pipeline='atac') # so does not create edges
-    
-    print('PASSAGE 3) Storing the Normalized data ....')
-    sce = storeNormalized(sce,memory.save)
-    
-    print('PASSAGE 4) Storing the Normalized-Transformed data (needed for some plots) ....')
-    sce = storeTransformed(sce)
+  print('PASSAGE 1) Per-processing the dataset')
+  sce=preProcess(sce,pipeline='atac')
+  sce = storeNormalized(sce,memory.save = FALSE)
   }
+  sce=setODgenes(sce,min_ODscore = 2)
   
-  else
-    
-  {
-    sce = storeNormalized(sce,memory.save)
-    sce = storeTransformed(sce)
-  }
-  
-  # sce=setODgenes(sce,min_ODscore = 4)
-  # sce=setDistances(sce,modality='jaccard')
-  # sce=setClusters(sce)
-  sce=RecursiveClustering(sce,modality='jaccard',fragment=fragment)
+  normcounts(sce)[normcounts(sce)>0]=1
+  sce=setDistances(sce,modality='pca',pca.components=pca.components)
+  sce=setClusters(sce)
 
   print('PASSAGE 7) Computing TSNE ...')
   sce=storeTsne(sce)
@@ -4120,12 +4514,6 @@ bigscale.atac = function (sce, memory.save=FALSE, fragment=0.1){
   
   print('PASSAGE 11) Organizing the markers ...')
   sce=setMarkers(sce)
-  
-  if (memory.save==TRUE)
-  { 
-    print('PASSAGE 12) Restoring full matrices of normalized counts and transformed counts...')
-    sce=restoreData(sce)
-  }
   
   return(sce)
   
