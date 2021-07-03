@@ -2423,6 +2423,8 @@ if (is.na(previous.output))
   else
   {
     print('It appears you want to tweak previously created networks with a different quantile.p, proceeding ....')
+    print(sprintf(' %g paths ',path))
+    print(sprintf('%g lncs ',length(lncs)))
     tot.scores=previous.output$tot.scores
     gene.names=colnames(previous.output$correlations)
     mycl=previous.output$clusters
