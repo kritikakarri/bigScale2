@@ -2494,8 +2494,9 @@ colnames(Df)=gene.names
 
 
 print(sprintf('Inferred the raw regulatory network: %g nodes and %g edges (ratio E/N)=%f',length(igraph::V(G)),length(igraph::E(G)),length(igraph::E(G))/length(igraph::V(G))))
-path=path
-G=polish.graph(G,path,lncs)
+print(sprintf(' %g paths ',path))
+print(sprintf('%g lncs ',length(lncs)))
+G=polish.graph(G,path=path,lncs=lncs)
 comp=igraph::components(G)
 small.comp=which(comp$csize<0.01*sum(comp$csize))
 to.remove=which(is.element(comp$membership,small.comp))
