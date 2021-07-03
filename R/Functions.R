@@ -2481,7 +2481,7 @@ colnames(Df)=gene.names
 
 print(sprintf('Inferred the raw regulatory network: %g nodes and %g edges (ratio E/N)=%f',length(igraph::V(G)),length(igraph::E(G)),length(igraph::E(G))/length(igraph::V(G))))
 
-G=polish.graph(G)
+G=polish.graph(G,1)
 comp=igraph::components(G)
 small.comp=which(comp$csize<0.01*sum(comp$csize))
 to.remove=which(is.element(comp$membership,small.comp))
