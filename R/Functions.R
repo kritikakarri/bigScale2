@@ -2303,7 +2303,7 @@ compute.network.model = function (expr.data)
 #' @export
 
   
-compute.network = function (expr.data,gene.names,modality='pca',model=NA,clustering='recursive',quantile.p=0.9,speed.preset='slow',previous.output=NA,path=1){
+compute.network = function (expr.data,gene.names,modality='pca',model=NA,clustering='recursive',quantile.p=0.9,speed.preset='slow',previous.output=NA,path=NA,lncs=NA){
 
 if (is.na(previous.output))  
   {
