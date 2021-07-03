@@ -1699,7 +1699,7 @@ polish.graph = function (G)
   best.hit=which(hits==max(hits))
   rm(mapped,org.ann)
   gc()
-  print(sprintf('Recognized %g/%g (%.2f%%) as %s',max(hits),length(gene.names),max(hits)/length(gene.names)*100,class.names[best.hit]))
+  print(sprintf('Recognized kritika %g/%g (%.2f%%) as %s',max(hits),length(gene.names),max(hits)/length(gene.names)*100,class.names[best.hit]))
   
   #if (best.hit==1 | best.hit==2) organism.detected='human'
   if (best.hit==1 | best.hit==2) organism.detected='mouse'
