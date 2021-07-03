@@ -2303,8 +2303,9 @@ compute.network.model = function (expr.data)
 #' @export
 
   
-compute.network = function (expr.data,gene.names,modality='pca',model=NA,clustering='recursive',quantile.p=0.9,speed.preset='slow',previous.output=NA,path=1,lncs=NA){
-
+compute.network = function (expr.data,gene.names,modality='pca',model=NA,clustering='recursive',quantile.p=0.9,speed.preset='slow',previous.output=NA,path=path,lncs=NA){
+    print(sprintf('1st pass %g paths ',path))
+    print(sprintf('1st pass %g lncs ',length(lncs))) 
 if (is.na(previous.output))  
   {
   
@@ -2423,8 +2424,8 @@ if (is.na(previous.output))
   else
   {
     print('It appears you want to tweak previously created networks with a different quantile.p, proceeding ....')
-    print(sprintf(' %g paths ',path))
-    print(sprintf('%g lncs ',length(lncs)))
+    print(sprintf('2nd pass %g paths ',path))
+    print(sprintf('2nd pass %g lncs ',length(lncs)))
     tot.scores=previous.output$tot.scores
     gene.names=colnames(previous.output$correlations)
     mycl=previous.output$clusters
@@ -2448,7 +2449,9 @@ print(o)
 Dp=Rfast::cora(tot.scores)
 o=gc()
 print(o)
-
+print(sprintf('2nd pass %g paths ',path))
+print(sprintf('2nd pass %g lncs ',length(lncs)))
+    
 if (quantile.p>1)
   {
   print('Calculating correlation quantile associated with your quantile.p ...')
@@ -2496,8 +2499,8 @@ colnames(Df)=gene.names
 
 
 print(sprintf('Inferred the raw regulatory network: %g nodes and %g edges (ratio E/N)=%f',length(igraph::V(G)),length(igraph::E(G)),length(igraph::E(G))/length(igraph::V(G))))
-print(sprintf(' %g paths ',path))
-print(sprintf('%g lncs ',length(lncs)))
+print(sprintf(' 3rd pass %g paths ',path))
+print(sprintf('3rd pass %g lncs ',length(lncs)))
 G=polish.graph(G,path=path,lncs=lncs)
 comp=igraph::components(G)
 small.comp=which(comp$csize<0.01*sum(comp$csize))
