@@ -2029,6 +2029,8 @@ polish.graph = function (G,path,lncs)
   if(path==1) org.ann[[1]]=as.list(org.Mm.eg.db::org.Mm.egALIAS2EG)
   if(path==2)org.ann[[1]]=as.list(gene.names)
   if(path==3) org.ann[[1]]=as.list(gene.names)
+  if(path==4) org.ann[[1]]=as.list(org.Mm.eg.db::org.Mm.egALIAS2EG)
+  if(path==5) org.ann[[1]]=as.list(gene.names)
   
   #org.ann[[3]]=as.list(gene.names)
   #org.ann[[4]]=as.list(gene.names)
@@ -2037,6 +2039,8 @@ polish.graph = function (G,path,lncs)
   if(path==1) mapped$map1=which(is.element(gene.names,names(org.ann[[1]])))
   if(path==2) mapped$map1=which(is.element(gene.names,(org.ann[[1]])))
   if(path==3) mapped$map1=which(is.element(gene.names,(org.ann[[1]])))
+  if(path==4) mapped$map1=which(is.element(gene.names,names(org.ann[[1]])))
+  if(path==5) mapped$map1=which(is.element(gene.names,(org.ann[[1]])))
    
   hits=unlist(lapply(mapped, length))
   best.hit=which(hits==max(hits))
@@ -2068,6 +2072,14 @@ polish.graph = function (G,path,lncs)
     regulators.entrez <- c(GO.ann$lnc,regulators_old)
     
   }
+  if (path==4) regulators.entrez <- c(GO.ann$`GO:0006355`,GO.ann$`GO:0003700`)
+ 
+  if (path==5) {
+    regulators.entrez_old <- c(GO.ann$`GO:0006355`,GO.ann$`GO:0003700`)
+    org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
+    regulators_old=unique(unlist(org.ann[regulators.entrez_old]))
+    regulators.entrez <- c(GO.ann$lnc,regulators_old)
+  }  
   #regulators.entrez <- GO.ann$`GO:0010468`
   
   
@@ -2075,10 +2087,12 @@ polish.graph = function (G,path,lncs)
   names(gene.names1) <- c(gene.names)
   
   if (path==1 & organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
+  if (path==4 & organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(org.Mm.eg.db::org.Mm.egSYMBOL)
+ 
   if (path==2 & organism.detected=='mouse' & code.detected=='gene.name') org.ann=as.list(gene.names1)
   
-  if(path==1| path==2) regulators=unique(unlist(org.ann[regulators.entrez]))
-  if(path==3) regulators=regulators.entrez
+  if(path==1| path==2| path==4) regulators=unique(unlist(org.ann[regulators.entrez]))
+  if(path==3| path==5) regulators=regulators.entrez
 print(sprintf('Recognized regultors  %g',length(regulators)))
    
   
